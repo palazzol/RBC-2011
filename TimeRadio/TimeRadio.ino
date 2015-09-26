@@ -4,7 +4,7 @@
 #include <Wire.h>
 //#include <Servo.h>
 #include <RogueMP3.h>
-#include <NewSoftSerial.h>
+#include <SoftwareSerial.h>
 #include "tracks.h"
 
 
@@ -511,8 +511,8 @@ void calibrateMotor() {
 //===================================================
 void setVolume(byte vol, byte pot) {
   Wire.beginTransmission(POT_1_ADDY);
-  Wire.send(pot);
-  Wire.send(vol);
+  Wire.write(pot);
+  Wire.write(vol);
   
   Wire.endTransmission();
 }
@@ -533,8 +533,8 @@ void displayYear(long yr) {
   out = out | digit2;
   //out = 0x88;
   Wire.beginTransmission(IO_1_ADDY);
-  Wire.send(0x13);
-  Wire.send(out);
+  Wire.write(0x13);
+  Wire.write(out);
   Wire.endTransmission();
   Serial.print(out, HEX);
   
@@ -545,8 +545,8 @@ void displayYear(long yr) {
   out = out | digit2;
   //out = 0x88;
   Wire.beginTransmission(IO_2_ADDY);
-  Wire.send(0x13);
-  Wire.send(out);
+  Wire.write(0x13);
+  Wire.write(out);
   Wire.endTransmission();
   
   Serial.print(out, HEX);
@@ -556,8 +556,8 @@ void displayYear(long yr) {
   out = digit1 << 4;
   //`out = 0x88;
   Wire.beginTransmission(IO_2_ADDY);
-  Wire.send(0x12);
-  Wire.send(out);
+  Wire.write(0x12);
+  Wire.write(out);
   Wire.endTransmission();
   Serial.println(out, HEX);
   
@@ -565,14 +565,14 @@ void displayYear(long yr) {
 
 void display_init() {
   Wire.beginTransmission(IO_1_ADDY);
-  Wire.send(0x00);
-  Wire.send(0x00);
-  Wire.send(0x00);
+  Wire.write(0x00);
+  Wire.write(0x00);
+  Wire.write(0x00);
   Wire.endTransmission();
   Wire.beginTransmission(IO_2_ADDY);
-  Wire.send(0x00);
-  Wire.send(0x00);
-  Wire.send(0x00);
+  Wire.write(0x00);
+  Wire.write(0x00);
+  Wire.write(0x00);
   Wire.endTransmission();
 }
 
@@ -665,8 +665,8 @@ byte fm_updateRegisters(void) {
     byte high_byte = fm_registers[regSpot] >> 8;
     byte low_byte = fm_registers[regSpot] & 0x00FF;
 
-    Wire.send(high_byte); //Upper 8 bits
-    Wire.send(low_byte); //Lower 8 bits
+    Wire.write(high_byte); //Upper 8 bits
+    Wire.write(low_byte); //Lower 8 bits
   }
 
   //End this transmission
@@ -693,8 +693,8 @@ void fm_readRegisters(void){
   //Remember, register 0x0A comes in first so we have to shuffle the array around a bit
   for(int x = 0x0A ; ; x++) { //Read in these 32 bytes
     if(x == 0x10) x = 0; //Loop back to zero
-    fm_registers[x] = Wire.receive() << 8;
-    fm_registers[x] |= Wire.receive();
+    fm_registers[x] = Wire.read() << 8;
+    fm_registers[x] |= Wire.read();
     if(x == 0x09) break; //We're done!
   }
 }

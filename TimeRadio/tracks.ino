@@ -1,4 +1,4 @@
-#include <NewSoftSerial.h>
+#include <SoftwareSerial.h>
 #include <RogueMP3.h>
 #include <limits.h>
 #include "tracks.h"
@@ -80,7 +80,7 @@
 
 
 
-NewSoftSerial ump3_serial(RX2_PIN, TX2_PIN);
+SoftwareSerial ump3_serial(RX2_PIN, TX2_PIN);
 RogueMP3 ump3(ump3_serial);
 
 
@@ -200,7 +200,7 @@ const long baud_table[]=
 #define BAUD_TABLE_SZ (sizeof(baud_table)/sizeof(unsigned long))
 
 
-long soft_serial_auto_baud(NewSoftSerial * pSerial)
+long soft_serial_auto_baud(SoftwareSerial * pSerial)
 {
   int idx, k;
   
