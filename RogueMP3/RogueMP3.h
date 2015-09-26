@@ -152,9 +152,9 @@ class RogueMP3 : public Print
 
     inline int16_t version(void) { return _fwversion; }
 
-    void write(uint8_t);  // needed for Print
+    size_t write(uint8_t);  // needed for Print
 
-    void print_P(const prog_char *str);
+    void print_P(const char *str);
 
   private:
 

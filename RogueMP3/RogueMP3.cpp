@@ -270,6 +270,7 @@ void RogueMP3::fade_lr(uint8_t new_vleft, uint8_t new_vright, uint16_t fadems)
   uint16_t fadetimestep = 0;
   int16_t il, ir;
   int8_t i;
+  uint16_t j;
 
   fadetimestep = fadems/FADE_STEPS;
 
@@ -296,7 +297,8 @@ void RogueMP3::fade_lr(uint8_t new_vleft, uint8_t new_vright, uint16_t fadems)
       vleft += il;
       vright += ir;
       setvolume(vleft/16, vright/16);
-      _delay_ms(fadetimestep);
+      for (j = 0; j < fadetimestep; j++)
+      	_delay_ms(1);
     }
   }
 }
@@ -412,7 +414,7 @@ void RogueMP3::setloop(uint8_t loopcount)
 }
 
 
-// Added for sending prog_char strings
+// Added for sending char strings
 void RogueMP3::print_P(const char *str)
 {
   while (pgm_read_byte(str) != 0)
@@ -515,7 +517,7 @@ int16_t RogueMP3::gettracklength(const char *path, const char *filename, uint8_t
 * Public (virtual)
 *************************************************/
 
-void RogueMP3::write(uint8_t c)
+size_t RogueMP3::write(uint8_t c)
 {
   _comms->write(c);
 } 
