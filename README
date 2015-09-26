@@ -1,18 +1,23 @@
 
+ChronoTune archive
 
-The rMP3 library requires an updated NewSoftSerial Library
-Source: http://www.roguerobotics.com/wikidocs/code/library/arduino/roguemp3#rogue_robotics_mp3_playback_module_interface_library_usage
+The TimeRadio directory contains the main project
 
-Ardino Serail Base Class:
-http://www.roguerobotics.com/wikidocs/code/arduino_serial_base_class
+This required RogueMP3 library is zipped into Arduino-Library-RogueMP3-V0003.1.zip,
+please add it to your project.
 
-    1. Download the Arduino with Stream Core.
-        http://rogue-code.googlecode.com/files/ArduinoCore-Stream.zip
-        
-    2. Install into SKETCHBOOK/hardware folder (create the hardware folder if it doesn't exist).
-    
-    3. Start the IDE and select one of the ”(Stream)” version of your board from the Tools|Board menu.
-    
-    4. NewSoftSerial and other libraries with Stream modifications can be downloaded from:
-        
+The RogueMP3 directory contains the changes made to the RogueMP3 library since 0003
+It has updated to work with Arduino 1.6.5
+Source:  http://www.roguerobotics.com/wikidocs/code/library/arduino/roguemp3
+
+NOTE: Please update your Arduino Wire library installation to enable 400Khz I2C as described here:
+http://www.arduino.cc/cgi-bin/yabb2/YaBB.pl?num=1241668644
+After you change the twi.h header file, there is no need to delete .o files.
+The Wire library is rebuilt with your project
+
+
+
+
+
+
 
