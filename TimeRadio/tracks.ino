@@ -1,7 +1,5 @@
-#include <SoftwareSerial.h>
-#include <RogueMP3.h>
+
 #include <limits.h>
-#include "tracks.h"
 
 #if 0
 #define DEBUG_UMP3(x) Serial.println((x))
@@ -9,73 +7,72 @@
 #define DEBUG_UMP3(x) ;
 #endif
 
+DateCode::DateCode(){};
 
-    DateCode::DateCode(){};
-    
-    DateCode::DateCode(long v)
-    {
-      this->value.whole = v;
-    }
-    
-    DateCode::DateCode(int y, int e)
-    {
-      this->set(y, e);
-    }
-        
-    int DateCode::set_str(char * str)
-    {
-      int year;
-      int epoch;
-      
-      sscanf(str, "%de%d.mp3", &year, &epoch);
-    
-      this->set(year, epoch);
-    }
-     
-    void DateCode::set(int year, int epoch)
-    {  
-      if(year < 0)
-        epoch = -epoch;
+DateCode::DateCode(long v)
+{
+  this->value.whole = v;
+}
 
-      this->value.high_word = epoch;
-      this->value.low_word = year;      
-    }
+DateCode::DateCode(int y, int e)
+{
+  this->set(y, e);
+}
     
-    int DateCode::get_filename(char * str)
-    {
-      int year, epoch;
-      
-      year = this->value.low_word;
-      epoch = this->value.high_word;
-      epoch = abs(epoch);     
-      
-      return sprintf(str, "%de%02d.mp3", year, epoch); 
-    }
-    
-    bool DateCode::operator>(DateCode other)
-    {
-      return this->value.whole > other.value.whole;
-    }
+int DateCode::set_str(char * str)
+{
+  int year;
+  int epoch;
+  
+  sscanf(str, "%de%d.mp3", &year, &epoch);
 
-    bool DateCode::operator<(DateCode other)
-    {
-      return this->value.whole < other.value.whole;
-    }
+  this->set(year, epoch);
+}
+ 
+void DateCode::set(int year, int epoch)
+{  
+  if(year < 0)
+    epoch = -epoch;
 
-    long DateCode::operator-(DateCode other)
-    {
-      return this->value.whole - other.value.whole;
-    }
-    
-    int DateCode::epoch()
-    {
-      return abs(this->value.high_word);
-    }
-    
-    int DateCode::year()
-    {
-      return this->value.low_word;
-    }
+  this->value.high_word = epoch;
+  this->value.low_word = year;      
+}
+
+int DateCode::get_filename(char * str)
+{
+  int year, epoch;
+  
+  year = this->value.low_word;
+  epoch = this->value.high_word;
+  epoch = abs(epoch);     
+  
+  return sprintf(str, "%de%02d.mp3", year, epoch); 
+}
+
+bool DateCode::operator>(DateCode other)
+{
+  return this->value.whole > other.value.whole;
+}
+
+bool DateCode::operator<(DateCode other)
+{
+  return this->value.whole < other.value.whole;
+}
+
+long DateCode::operator-(DateCode other)
+{
+  return this->value.whole - other.value.whole;
+}
+
+int DateCode::epoch()
+{
+  return abs(this->value.high_word);
+}
+
+int DateCode::year()
+{
+  return this->value.low_word;
+}
 
 
 
@@ -85,7 +82,6 @@ RogueMP3 ump3(ump3_serial);
 
 
 #define LINE_BUF_SZ 64
-
 
 //
 //  tracks_init
