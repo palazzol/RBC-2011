@@ -1,15 +1,9 @@
 //Modify the wire library for 400KHz - described here: http://www.arduino.cc/cgi-bin/yabb2/YaBB.pl?num=1241668644
 
-
 #include <Wire.h>
-//#include <Servo.h>
 #include <RogueMP3.h>
 #include <SoftwareSerial.h>
 #include "tracks.h"
-
-
-#define FAIL  0
-#define SUCCESS  1
 
 #define DOWN  0 //Direction used for seeking. Default is down
 #define UP  1
@@ -28,7 +22,7 @@
 #define MAX_YR 2085
 
 //===================================================
-//Pins and addressed
+//Pins and addresses
 //===================================================
 #define SDIO_PIN     18 //SDA/A4 on Arduino
 #define SCLK_PIN     19 //SCL/A5 on Arduino
@@ -38,20 +32,13 @@
 #define TX2_PIN      7
 #define RX2_PIN      6
 
-#define ENCODER_A_PIN 2 //Interupt pin
+#define ENCODER_A_PIN 2 //Interrupt pin
 #define ENCODER_B_PIN 4
 
-#define PHOTO_1_PIN  3 //Interupt pin
 #define MOT_LIM_PIN  5
 
 #define MOT_PIN      9 //Should be hardware PWM - only spot left after SPI
 #define MOT_DIR_PIN  8
-
-#define SCK_PIN      13
-#define MISO_PIN     12
-#define MOSI_PIN     11
-#define SS1_PIN      10
-#define SS2_PIN      16 //A2
 
 #define FM_ADDY 0x10
 #define POT_1_ADDY 0x28
@@ -93,21 +80,16 @@ volatile int pending = 0;
 volatile long newYear = 0;
 long curYear = 0;
 
-
 void setup() {
   Serial.begin(57600);
   
   //Rotary Encoder
   pinMode(ENCODER_A_PIN, INPUT);
   pinMode(ENCODER_B_PIN, INPUT);
-  
-  
-  //Photo Gates
-  pinMode(PHOTO_1_PIN, INPUT);
+
   pinMode(MOT_LIM_PIN, INPUT);
   digitalWrite(MOT_LIM_PIN, HIGH); //Set pull up
-  attachInterrupt(1, needleChange, CHANGE);
-
+ 
   //Motor
   pinMode(MOT_PIN, OUTPUT);
   digitalWrite(MOT_PIN, LOW);
@@ -147,7 +129,7 @@ void setup() {
   
   calibrateMotor();
   
-  attachInterrupt(0, encoderChange, FALLING); 
+  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoderChange, FALLING); 
 }
 
 int trackIdx=0;
@@ -362,75 +344,6 @@ void encoderChange() {
     }
   }*/
   
-}
-
-//Interupt Service Routine for Photo Gate
-void needleChange() {
-  a = digitalRead(MOT_LIM_PIN);
-  motLast = millis();
-  
-  needlePos += needleDir; // 1, 0, -1
-  //Serial.println(needlePos);
-  
-  if (needlePos < 0) {
-    needlePos = 0;
-  }
-  
-  if (a == LOW) {
-    needlePos = 0;
-    //Serial.println("Low Limit");
-    if (needleDir == MOT_DOWN) {
-      //Serial.println("Mot Stop");
-      motorStop();
-    }
-    return;
-  }
-  
-  if (needlePos >= MOT_MAX) {
-    //needlePos = MOT_MAX;
-    //Serial.println("High Limit");
-    if (needleDir == MOT_UP) {
-      motorStop();
-    }
-    return;
-  }
-  
-  long yr = (int)posToYear(needlePos);
-  if (currTrackIdx < 0) {
-    newYear = yr;
-  }
-  updateMotor();
-  
-  if (pending != 1) {
-    char filename[FILE_NAME_MAX_SZ];
-    
-    DateCode dc(yr);
-    int idx = find_track_idx(dc);
-    //track_table[idx].get_filename(filename);
-    
-    
-    
-    if ((currTrackIdx >= 0) && (abs(track_table[currTrackIdx] - dc) >= 3) && (newTrackIdx != -2)) {
-      pending = 1;
-      newTrackIdx = -2;
-      //Serial.println("Detune");
-      //setVolume(0, 0xaa);
-      //setVolume(65, 0xa9);
-    }
-    
-    if (abs(track_table[idx] - dc) < 1) {
-      if ((currTrackIdx != idx) && (newTrackIdx != idx)) {
-        pending = 1;
-        //Serial.print("Set");
-        //Serial.println(get_free_memory());
-        //Serial.println(filename);
-        newTrackIdx = idx;
-        //play_track_idx(idx);
-      }
-    }
-  }
-  
-
 }
 
 void playTrack(int idx) {
@@ -655,7 +568,7 @@ void fm_init() {
 }
 
 
-byte fm_updateRegisters(void) {
+bool fm_updateRegisters(void) {
 
   Wire.beginTransmission(FM_ADDY);
   //A write command automatically begins with register 0x02 so no need to send a write-to address
@@ -674,10 +587,10 @@ byte fm_updateRegisters(void) {
  if(ack != 0) { //We have a problem! 
     Serial.print("Write Fail:"); //No ACK!
     Serial.println(ack, DEC); //I2C error: 0 = success, 1 = data too long, 2 = rx NACK on address, 3 = rx NACK on data, 4 = other error
-    return(FAIL);
+    return false;
   }
 
-  return(SUCCESS);
+  return true;
 }
 
 
@@ -701,7 +614,7 @@ void fm_readRegisters(void){
 
 
 
-byte fm_seek(byte seekDirection){
+bool fm_seek(byte seekDirection){
   fm_readRegisters();
 
   //Set seek mode wrap bit
@@ -738,11 +651,11 @@ byte fm_seek(byte seekDirection){
 
   if(valueSFBL) { //The bit was set indicating we hit a band limit or failed to find a station
     Serial.println("Seek limit hit"); //Hit limit of band during seek
-    return(FAIL);
+    return false;
   }
 
   Serial.println("Seek complete"); //Tuning complete!
-  return(SUCCESS);
+  return true;
 }
 
 int fm_readChannel(void) {
