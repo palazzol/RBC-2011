@@ -63,7 +63,6 @@ uint16_t fm_registers[16];
 volatile int needlePos = 0;
 volatile int needleDir = UP;
 volatile int encoderPos = 0;
-volatile byte encoderDir = UP;
 volatile int destPos = 0;
 
 volatile byte a = LOW;
@@ -291,27 +290,22 @@ void encoderChange() {
   a = digitalRead(ENCODER_A_PIN);
   b = digitalRead(ENCODER_B_PIN);
   
-  if (b != a) {
-    encoderDir = UP;
-    encoderPos++;
-  } else {
-    encoderDir = DOWN;
-    encoderPos--;
+  if (b != a) { // up tick
+    if (encoderPos < MAX_ENCODER) {
+      encoderPos++;
+    }
+  } else { // down tick
+    if (encoderPos > MIN_ENCODER) {
+      encoderPos--;
+    }
   }
-  
-  if (encoderPos > MAX_ENCODER) {
-    encoderDir = DOWN;
-    encoderPos = MAX_ENCODER;
-  }
-  
-  if (encoderPos < MIN_ENCODER) {
-    encoderDir = UP;
-    encoderPos = MIN_ENCODER;
-  }
-  
+
+  // NOTE: Should probably do this stuff outside of ISR
   destPos = (encoderPos/4);
   //Serial.println(destPos);
   updateMotor();
+
+  // UMMM...where do we trigger to play a track?
   
   /*
   if (pending == 0) {

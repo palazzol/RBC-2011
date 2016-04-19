@@ -98,14 +98,15 @@ int tracks_init(void)
   
   DEBUG_UMP3("tracks_init");
 
-  while(4800 != soft_serial_auto_baud(&ump3_serial))
+  DEBUG_UMP3("Contacting ump3...");
+  ump3_serial.begin(9600);
+  ump3_serial.print((char)'\r');
+  while ('>' != ump3_serial.read())
   {
-    DEBUG_UMP3("settting baud rate to 4800");
-    ump3_serial.print("STD6\r");
     delay(100);
-    ump3_serial.end();
-    ump3_serial.begin(4800);
+    ump3_serial.print((char)'\r');
   }
+  DEBUG_UMP3("Success");       
 
   idx = ump3.sync();
   DEBUG_UMP3(String("ump3.sync() ") + String(idx));
@@ -183,42 +184,5 @@ void play_track_idx(int idx)
 
 }
 
-const long baud_table[]=
-{
-  2400,
-  4800,
-  9600,
-  19200,
-  38400,
-  57600,
-  115200
-};
-#define BAUD_TABLE_SZ (sizeof(baud_table)/sizeof(unsigned long))
-
-
-long soft_serial_auto_baud(SoftwareSerial * pSerial)
-{
-  int idx, k;
-  
-  for(idx=0; idx<BAUD_TABLE_SZ; idx++)
-  {
-    pSerial->begin(baud_table[idx]);
-    
-    pSerial->print((char)0x0D); // CR
-    
-    for(k=0; k<10; k++)
-    {
-      if('>' == pSerial->read())
-      {
-        return baud_table[idx];
-      }
-      delay(10);
-    }    
-    
-    pSerial->end();
-  }
-  
-  return -1;
-}
   
   
