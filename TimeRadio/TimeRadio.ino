@@ -35,6 +35,7 @@
 #define ENCODER_A_PIN 2 //Interrupt pin
 #define ENCODER_B_PIN 4
 
+#define MOTOR_FB_PIN  3 //Interrupt pin, tied to MOT_PIN
 #define MOT_LIM_PIN  5
 
 #define MOT_PIN      9 //Should be hardware PWM - only spot left after SPI
@@ -69,7 +70,6 @@ volatile byte a = LOW;
 volatile byte b = LOW;
 
 volatile int motSpeed = MOT_DEF_SPD;
-volatile unsigned long motLast = 0;
 
 volatile int currTrackIdx = -1;
 volatile int newTrackIdx = -1;
@@ -81,21 +81,27 @@ long curYear = 0;
 
 void setup() {
   Serial.begin(57600);
-  
+
   //Rotary Encoder
   pinMode(ENCODER_A_PIN, INPUT);
   pinMode(ENCODER_B_PIN, INPUT);
 
+  // Note: MOTOR_FB_PIN and MOT_PIN are tied together
+  // This allows a rudimentary notion of how far the needle has travelled
+  // based on counting the number of PWM cycles sent to the motor, and the
+  // direction it is being driven.
+  
+  pinMode(MOTOR_FB_PIN, INPUT);
+
   pinMode(MOT_LIM_PIN, INPUT);
   digitalWrite(MOT_LIM_PIN, HIGH); //Set pull up
- 
+  attachInterrupt(digitalPinToInterrupt(MOTOR_FB_PIN), needleChange, CHANGE);
+  
   //Motor
   pinMode(MOT_PIN, OUTPUT);
   digitalWrite(MOT_PIN, LOW);
   pinMode(MOT_DIR_PIN, OUTPUT);
   digitalWrite(MOT_DIR_PIN, LOW);
-  
-  
   
   //FM
   fm_init();
@@ -166,7 +172,6 @@ void loop() {
     
     Serial.print(" dest ");
     Serial.println(destPos);
-    motLast = millis();
     updateMotor();
   }
   
@@ -285,8 +290,10 @@ void loop() {
 
 
 
-//Interupt Service Routine for Encoder
+//Interrupt Service Routine for Encoder
 void encoderChange() {
+  // we should assume a is low because this is a "falling" routine
+  // and we should have timely interrupt processing
   a = digitalRead(ENCODER_A_PIN);
   b = digitalRead(ENCODER_B_PIN);
   
@@ -300,12 +307,11 @@ void encoderChange() {
     }
   }
 
-  // NOTE: Should probably do this stuff outside of ISR
+  // NOTE: Everything past this point should be moved to loop()
+  //       Maybe even remove encoder limit checking above
   destPos = (encoderPos/4);
   //Serial.println(destPos);
   updateMotor();
-
-  // UMMM...where do we trigger to play a track?
   
   /*
   if (pending == 0) {
@@ -338,6 +344,74 @@ void encoderChange() {
     }
   }*/
   
+}
+
+//Interrupt Service Routine for Motor Feedback
+void needleChange() {
+  a = digitalRead(MOT_LIM_PIN);
+  
+  needlePos += needleDir; // 1, 0, -1
+  //Serial.println(needlePos);
+
+  // NOTE: Need to do limited checking here and everything else below goes to loop()
+  
+  if (needlePos < 0) {
+    needlePos = 0;
+  }
+  
+  if (a == LOW) {
+    needlePos = 0;
+    //Serial.println("Low Limit");
+    if (needleDir == MOT_DOWN) {
+      //Serial.println("Mot Stop");
+      motorStop();
+    }
+    return;
+  }
+  
+  if (needlePos >= MOT_MAX) {
+    //needlePos = MOT_MAX;
+    //Serial.println("High Limit");
+    if (needleDir == MOT_UP) {
+      motorStop();
+    }
+    return;
+  }
+  
+  long yr = (int)posToYear(needlePos);
+  if (currTrackIdx < 0) {
+    newYear = yr;
+  }
+  updateMotor();
+  
+  if (pending != 1) {
+    char filename[FILE_NAME_MAX_SZ];
+    
+    DateCode dc(yr);
+    int idx = find_track_idx(dc);
+    //track_table[idx].get_filename(filename);
+    
+    
+    
+    if ((currTrackIdx >= 0) && (abs(track_table[currTrackIdx] - dc) >= 3) && (newTrackIdx != -2)) {
+      pending = 1;
+      newTrackIdx = -2;
+      //Serial.println("Detune");
+      //setVolume(0, 0xaa);
+      //setVolume(65, 0xa9);
+    }
+    
+    if (abs(track_table[idx] - dc) < 1) {
+      if ((currTrackIdx != idx) && (newTrackIdx != idx)) {
+        pending = 1;
+        //Serial.print("Set");
+        //Serial.println(get_free_memory());
+        //Serial.println(filename);
+        newTrackIdx = idx;
+        //play_track_idx(idx);
+      }
+    }
+  }
 }
 
 void playTrack(int idx) {
