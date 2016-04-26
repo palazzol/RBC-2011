@@ -76,10 +76,10 @@ int DateCode::year()
 
 
 
-
+#if !defined (__AVR_ATmega2560__)
 SoftwareSerial ump3_serial(RX2_PIN, TX2_PIN);
+#endif
 RogueMP3 ump3(ump3_serial);
-
 
 #define LINE_BUF_SZ 64
 
@@ -103,7 +103,7 @@ int tracks_init(void)
   ump3_serial.print((char)'\r');
   while ('>' != ump3_serial.read())
   {
-    delay(100);
+    delay(1000);
     ump3_serial.print((char)'\r');
   }
   DEBUG_UMP3("Success");       

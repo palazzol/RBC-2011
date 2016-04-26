@@ -2,7 +2,9 @@
 
 #include <Wire.h>
 #include <RogueMP3.h>
+#if !defined (__AVR_ATmega2560__)
 #include <SoftwareSerial.h>
+#endif
 #include "tracks.h"
 
 #define DOWN  0 //Direction used for seeking. Default is down
@@ -24,13 +26,19 @@
 //===================================================
 //Pins and addresses
 //===================================================
+
+#if defined (__AVR_ATmega2560__)
+#define SDIO_PIN     20
+#define SCLK_PIN     21
+#define FM_RST_PIN   13
+
+#else // Uno or Duemillenove
 #define SDIO_PIN     18 //SDA/A4 on Arduino
 #define SCLK_PIN     19 //SCL/A5 on Arduino
-
 #define FM_RST_PIN   17 //A3
-
 #define TX2_PIN      7
 #define RX2_PIN      6
+#endif
 
 #define ENCODER_A_PIN 2 //Interrupt pin
 #define ENCODER_B_PIN 4

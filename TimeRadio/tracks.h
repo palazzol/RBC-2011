@@ -4,6 +4,10 @@
 #define TRACK_TABLE_MAX_SZ 128
 #define FILE_NAME_MAX_SZ 16
 
+#if defined (__AVR_ATmega2560__)
+#define ump3_serial Serial1 
+#endif
+
 extern RogueMP3 ump3;
 
 class DateCode
