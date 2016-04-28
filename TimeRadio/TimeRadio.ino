@@ -452,12 +452,25 @@ void motorStop() {
 }
 
 void updateMotor() {
+
+  if (needlePos < 0)
+    needlePos = 0;
+    
+  a = digitalRead(MOT_LIM_PIN);
+  if (a == LOW) {
+    needlePos = 0;
+    needleDir = MOT_STOP;
+    analogWrite(MOT_PIN, 0); //TODO Speed
+    return;
+  }
+
+#if 0
   if ((destPos == 0) && (needleDir == MOT_DOWN)) {
     if (needlePos < 0) {
       needlePos = 0;
     }
-    return;
   }
+#endif
   
   if ((needlePos <= (destPos + 1)) && (needlePos >= (destPos - 1))) {
     analogWrite(MOT_PIN, 0);
