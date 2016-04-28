@@ -98,15 +98,24 @@ int tracks_init(void)
   
   DEBUG_UMP3("tracks_init");
 
-  DEBUG_UMP3("Contacting ump3...");
-  ump3_serial.begin(9600);
-  ump3_serial.print((char)'\r');
-  while ('>' != ump3_serial.read())
+  Serial.println("Contacting ump3...");
+  ump3_serial.begin(4800); // 4800 is the default rate, even if the manual says 9600
+
+  bool done = false;
+  while (!done)
   {
     delay(1000);
-    ump3_serial.print((char)'\r');
+    ump3_serial.print('\r');
+    while (ump3_serial.available()) {
+      char c = ump3_serial.read();
+      if (c == '>')
+         done = true;
+    }
+    if (!done)
+      Serial.println("No chars");
   }
-  DEBUG_UMP3("Success");       
+
+  Serial.println("Success");       
 
   idx = ump3.sync();
   DEBUG_UMP3(String("ump3.sync() ") + String(idx));
@@ -119,7 +128,7 @@ int tracks_init(void)
   while(ump3_serial.peek() != '>')
   {
     idx = 0;
-    
+
     // read the whole line
     do
     {
@@ -137,9 +146,11 @@ int tracks_init(void)
     {
       track_table[track_table_sz++].set_str(file_name);
     }
-    
+
+    // wait here until next character is available
+    while(!ump3_serial.available());
   }
-  ump3_serial.read();
+  ump3_serial.read(); // read the '>'
 
   return 0;
 }
