@@ -137,7 +137,11 @@ void stepMotor() {
 }
 
 void UpdateDial() {
-  int ePos = encoderPos;
+  int ePos = 0;
+  
+  noInterrupts();
+  ePos = encoderPos;
+  interrupts();
   if (ePos != lastEncoderPos) {
     Serial.print("EncoderPos = ");
     Serial.println(ePos);
