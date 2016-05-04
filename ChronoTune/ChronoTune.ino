@@ -61,8 +61,8 @@ enum EPROM_ADDRESSES {
 // encoderPos - written by ISR, read by main loop
 volatile int encoderPos = 0;
 
-int lastEncoderPos = 0;
-int dialCounts = 0;
+int counts_1850 = INITIAL_COUNTS_1850;
+int counts_2050 = INITIAL_COUNTS_2050;
 
 void setup() {
   
@@ -86,12 +86,13 @@ void setup() {
 
   // Load dial calibration limits
   EEPROMInit();
+
+  SendDialToLimitSwitch();
+  SendDialToCountsFromLimitSwitch(counts_1850);
+  encoderPos = counts_1850;
   
   // Encoder Interrupt Service Routine
   attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoderISR, FALLING); 
-
-  SendDialToLimitSwitch();
-  SendDialToYearFromLimitSwitch(2016);
   
   //FM
   fm_init();
@@ -107,8 +108,6 @@ void setup() {
   Serial.println(ump3.getsetting('V'));
 }
 
-int counts_1850 = INITIAL_COUNTS_1850;
-int counts_2050 = INITIAL_COUNTS_2050;
 
 void EEPROMInit() {
   if (EEPROM.read(EEPROM_MAGIC) != 0x55) {
@@ -136,48 +135,17 @@ void stepMotor() {
     digitalWrite(MOT_PIN,HIGH);  
 }
 
-void UpdateDial() {
-  int ePos = 0;
-  
-  noInterrupts();
-  ePos = encoderPos;
-  interrupts();
-  if (ePos != lastEncoderPos) {
-    Serial.print("EncoderPos = ");
-    Serial.println(ePos);
-
-    int diff = ePos - lastEncoderPos;
-    if (diff > 0) {
-        if (dialCounts + diff > DIALMAX)
-          diff = DIALMAX - dialCounts;
-        dialCounts += diff;
-        digitalWrite(MOT_DIR_PIN, HIGH);
-    } else if (diff < 0) {
-        if (dialCounts + diff < DIALMIN)
-          diff = DIALMIN - dialCounts;
-        dialCounts += diff;
-        digitalWrite(MOT_DIR_PIN, LOW);
-        diff = -diff;
-    }
-    while(diff > 0) {
-        stepMotor();
-        diff--;
-    }
-    lastEncoderPos = ePos;
-  }
-}
-
-
-
 char c;
 int last_year = 0;
 bool playing = false;
+int encPos = 0;
 
 void loop() {
-  
-  UpdateDial();
-  
-  int year = counts_to_year(dialCounts);
+  noInterrupts();
+  encPos = encoderPos;
+  interrupts();
+
+  int year = counts_to_year(encPos);
   if (year != last_year) {
     Serial.print("Year = ");
     Serial.println(year);
@@ -252,7 +220,6 @@ void SendDialToCountsFromLimitSwitch(int val) {
 void SendDialToYearFromLimitSwitch(int val) {
   val = year_to_counts(val);
   SendDialToCountsFromLimitSwitch(val);
-  dialCounts = val;
 }
 
 int b_pin = LOW; // To prevent re-allocation in the ISR 
@@ -261,9 +228,19 @@ void encoderISR() {
   // and we should have timely interrupt processing
   b_pin = digitalRead(ENCODER_B_PIN);
   if (b_pin == HIGH) { // clockwise tick
-    encoderPos++;
+    if (encoderPos < DIALMAX) {
+      encoderPos++;
+      digitalWrite(MOT_DIR_PIN, HIGH);
+      digitalWrite(MOT_PIN,LOW);
+      digitalWrite(MOT_PIN,HIGH);
+    } 
   } else { // counter-clockwise tick
-    encoderPos--;
+    if (encoderPos > DIALMIN) {
+      encoderPos--;
+      digitalWrite(MOT_DIR_PIN, LOW);
+      digitalWrite(MOT_PIN,LOW);
+      digitalWrite(MOT_PIN,HIGH);
+    }
   }
 }
 
