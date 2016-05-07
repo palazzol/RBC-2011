@@ -87,7 +87,7 @@ void setup() {
   
   //FM
   fm_init();
-  gotoChannel(947);
+  gotoChannel(911);
   setVolume(0, 0xaa); //FM
 
   // MP3
@@ -108,15 +108,16 @@ int counts_to_year(int counts) {
 }
 
 void stepMotor() {
-    digitalWrite(MOT_PIN,LOW);
-    digitalWrite(MOT_PIN,HIGH);  
-    delayMicroseconds(500);
+  digitalWrite(MOT_PIN,LOW);
+  digitalWrite(MOT_PIN,HIGH);  
+  delayMicroseconds(500);
 }
 
 char c;
 int last_year = 0;
 bool playing = false;
 int encPos = 0;
+char fname[16];
 
 void loop() {
   encPos = readEncoder();
@@ -127,7 +128,6 @@ void loop() {
     Serial.println(year);
     last_year = year;
 
-#if 0
     if (playing) {
       stopPlay();
       playing = false;
@@ -136,10 +136,12 @@ void loop() {
     DateCode dc(year);
     int idx = find_track_idx(dc);
     if (idx >= 0) {
+      Serial.print("Playing track: ");
+      track_table[idx].get_filename(fname);
+      Serial.println(fname);
       playTrack(idx);
       playing = true;
     }
-#endif
     
   }
   

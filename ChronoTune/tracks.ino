@@ -93,25 +93,6 @@ int tracks_init(void)
   
   DEBUG_UMP3("tracks_init");
 
-  Serial.println("Contacting ump3...");
-  ump3_serial.begin(4800); // 4800 is the default rate, even if the manual says 9600
-
-  bool done = false;
-  while (!done)
-  {
-    ump3_serial.print('\r');
-    delay(500);
-    while (ump3_serial.available()) {
-      char c = ump3_serial.read();
-      if (c == '>')
-         done = true;
-    }
-    if (!done)
-      Serial.println("No chars");
-  }
-
-  Serial.println("Success");       
-
   idx = ump3.sync();
   DEBUG_UMP3(String("ump3.sync() ") + String(idx));
   ump3.stop();
@@ -151,27 +132,18 @@ int tracks_init(void)
 }
 
 
-
 int find_track_idx(DateCode target)
 {
   int idx;
-  int closest_idx = 0;
-  long diff;
-  long closest_diff = LONG_MAX;
   
   // this is pretty dumb, i know.
   // but can we be sure that the table is sorted?
   for(idx=0; idx<track_table_sz; idx++)
   {
-    diff = track_table[idx] - target;
-    if(abs(diff) < abs(closest_diff))
-    {
-      closest_idx = idx;
-      closest_diff = diff;
-    }
+    if ((track_table[idx] - target) == 0)
+      return idx;
   }
-
-  return closest_idx;
+  return -1;
 }
 
 void play_track_idx(int idx)
