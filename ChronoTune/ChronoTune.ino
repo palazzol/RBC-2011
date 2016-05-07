@@ -11,21 +11,13 @@
 DateCode track_table[TRACK_TABLE_MAX_SZ];
 int track_table_sz;
 
-// The Chronotune uses 5 bytes to store dial calibration constants
+// Where the dial stops
+#define COUNTS_MIN   300 
+#define COUNTS_MAX  2900
 
-enum EPROM_ADDRESSES {
-  EEPROM_MAGIC = 0,
-  EEPROM_1850_COUNTS_H,
-  EEPROM_1850_COUNTS_L,
-  EEPROM_2050_COUNTS_H,
-  EEPROM_2050_COUNTS_L
-};
-
-#define INITIAL_COUNTS_1850 416
-#define INITIAL_COUNTS_2050 2786
-
-#define DIALMIN 300
-#define DIALMAX 2900
+// Used for calibration
+#define COUNTS_1850  416
+#define COUNTS_2050 2786
 
 // ATmega2560 pin connections
 
@@ -61,8 +53,8 @@ enum EPROM_ADDRESSES {
 // encoderPos - written by ISR, read by main loop
 volatile int encoderPos = 0;
 
-int counts_1850 = INITIAL_COUNTS_1850;
-int counts_2050 = INITIAL_COUNTS_2050;
+int counts_1850 = COUNTS_1850;
+int counts_2050 = COUNTS_2050;
 
 void setup() {
   
@@ -84,41 +76,27 @@ void setup() {
   pinMode(MOT_DIR_PIN, OUTPUT);
   digitalWrite(MOT_DIR_PIN, LOW);
 
-  // Load dial calibration limits
-  EEPROMInit();
-
-  SendDialToLimitSwitch();
-  SendDialToCountsFromLimitSwitch(counts_1850);
-  encoderPos = counts_1850;
+  // encoderPos is not "live" yet, reset it to the current dial position
+  encoderPos = calculateStepsFromLimit();
+  if (encoderPos > COUNTS_MAX) 
+    encoderPos = COUNTS_MAX;
+  SendDialToCountsFromLimitSwitch(encoderPos);
   
   // Encoder Interrupt Service Routine
   attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoderISR, FALLING); 
   
   //FM
   fm_init();
-  //fm_seek(UP);
   gotoChannel(947);
   setVolume(0, 0xaa); //FM
 
-  setVolume(65, 0xa9); //MP3
+  // MP3
+  setVolume(65, 0xa9);
   tracks_init();
   ump3.changesetting('V', (uint8_t)10);
   Serial.print(track_table_sz);
   Serial.println(" tracks on the card");
   Serial.println(ump3.getsetting('V'));
-}
-
-
-void EEPROMInit() {
-  if (EEPROM.read(EEPROM_MAGIC) != 0x55) {
-    EEPROM.write(EEPROM_1850_COUNTS_H,INITIAL_COUNTS_1850/256);
-    EEPROM.write(EEPROM_1850_COUNTS_L,INITIAL_COUNTS_1850%256);
-    EEPROM.write(EEPROM_2050_COUNTS_H,INITIAL_COUNTS_2050/256);
-    EEPROM.write(EEPROM_2050_COUNTS_L,INITIAL_COUNTS_2050%256);
-    EEPROM.write(EEPROM_MAGIC,0x55);    
-  }
-  counts_1850 = EEPROM.read(EEPROM_1850_COUNTS_H)*256 + EEPROM.read(EEPROM_1850_COUNTS_L);
-  counts_2050 = EEPROM.read(EEPROM_2050_COUNTS_H)*256 + EEPROM.read(EEPROM_2050_COUNTS_L);
 }
 
 int year_to_counts(int year) {
@@ -131,8 +109,8 @@ int counts_to_year(int counts) {
 
 void stepMotor() {
     digitalWrite(MOT_PIN,LOW);
-    delayMicroseconds(500);
     digitalWrite(MOT_PIN,HIGH);  
+    delayMicroseconds(500);
 }
 
 char c;
@@ -141,9 +119,7 @@ bool playing = false;
 int encPos = 0;
 
 void loop() {
-  noInterrupts();
-  encPos = encoderPos;
-  interrupts();
+  encPos = readEncoder();
 
   int year = counts_to_year(encPos);
   if (year != last_year) {
@@ -209,17 +185,10 @@ void SendDialToLimitSwitch() {
 
 void SendDialToCountsFromLimitSwitch(int val) {
   digitalWrite(MOT_DIR_PIN, HIGH);
-  
-  int count = val;
-  while(count > 0) {
+  while(val > 0) {
     stepMotor();
-    count--;
+    val--;
   }
-}
-
-void SendDialToYearFromLimitSwitch(int val) {
-  val = year_to_counts(val);
-  SendDialToCountsFromLimitSwitch(val);
 }
 
 int b_pin = LOW; // To prevent re-allocation in the ISR 
@@ -228,20 +197,28 @@ void encoderISR() {
   // and we should have timely interrupt processing
   b_pin = digitalRead(ENCODER_B_PIN);
   if (b_pin == HIGH) { // clockwise tick
-    if (encoderPos < DIALMAX) {
+    if (encoderPos < COUNTS_MAX) {
       encoderPos++;
       digitalWrite(MOT_DIR_PIN, HIGH);
       digitalWrite(MOT_PIN,LOW);
       digitalWrite(MOT_PIN,HIGH);
     } 
   } else { // counter-clockwise tick
-    if (encoderPos > DIALMIN) {
+    if (encoderPos > COUNTS_MIN) {
       encoderPos--;
       digitalWrite(MOT_DIR_PIN, LOW);
       digitalWrite(MOT_PIN,LOW);
       digitalWrite(MOT_PIN,HIGH);
     }
   }
+}
+
+int e;
+int readEncoder() {
+  noInterrupts();
+  e = encoderPos;
+  interrupts();
+  return e;
 }
 
 void playTrack(int idx) {
