@@ -66,6 +66,10 @@ void setup() {
   pinMode(ENCODER_A_PIN, INPUT);
   pinMode(ENCODER_B_PIN, INPUT);
 
+  // Display
+  display_init();
+  displayYear(12345);
+  
   // Limit switch
   pinMode(MOT_LIM_PIN, INPUT);
   digitalWrite(MOT_LIM_PIN, HIGH);  // Pull-up, active low
@@ -128,6 +132,8 @@ void loop() {
     Serial.println(year);
     last_year = year;
 
+    displayYear(year*10);
+    
     if (playing) {
       stopPlay();
       playing = false;
@@ -224,9 +230,7 @@ int readEncoder() {
 }
 
 void playTrack(int idx) {
-  int newYear = track_table[idx].year();
   play_track_idx(idx);
-  //delay(250);
   setVolume(65, 0xaa);
   setVolume(0, 0xa9);
 }
@@ -469,5 +473,56 @@ void gotoChannel(int newChannel){
     if( (fm_registers[STATUSRSSI] & (1<<STC)) == 0) break; //Tuning complete!
     Serial.println("Waiting...");
   }
+}
+
+//===================================================
+//Display Stuff
+//===================================================
+void displayYear(long yr) {
+  int digit1 = 0;
+  int digit2 = 0;
+  byte out = 0;
+  
+  digit1 = (yr/1000) % 10;
+  digit2 = (yr/100) % 10;
+  
+  out = digit1 << 4;
+  out = out | digit2;
+  Wire.beginTransmission(IO_1_ADDY);
+  Wire.write(0x13);
+  Wire.write(out);
+  Wire.endTransmission();
+
+  digit1 = (yr/10) % 10;
+  digit2 = yr % 10;
+  
+  out = digit1 << 4;
+  out = out | digit2;
+  Wire.beginTransmission(IO_2_ADDY);
+  Wire.write(0x13);
+  Wire.write(out);
+  Wire.endTransmission();
+  
+  digit1 = yr/10000;
+  
+  out = digit1 << 4;
+  Wire.beginTransmission(IO_2_ADDY);
+  Wire.write(0x12);
+  Wire.write(out);
+  Wire.endTransmission();
+  
+}
+
+void display_init() {
+  Wire.beginTransmission(IO_1_ADDY);
+  Wire.write(0x00);
+  Wire.write(0x00);
+  Wire.write(0x00);
+  Wire.endTransmission();
+  Wire.beginTransmission(IO_2_ADDY);
+  Wire.write(0x00);
+  Wire.write(0x00);
+  Wire.write(0x00);
+  Wire.endTransmission();
 }
 
