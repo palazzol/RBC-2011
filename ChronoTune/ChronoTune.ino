@@ -69,9 +69,8 @@ typedef enum {
   STATE_RADIO_PLAYING,
 } PlayStateT;
 
-// Global vars needed to manage tracks
-DateCode track_table[TRACK_TABLE_MAX_SZ];
-int track_table_sz;
+// TrackManager
+TrackManager tm;
 
 void setup() {
   
@@ -111,8 +110,6 @@ void setup() {
   setVolume(65, 0xa9);
   tracks_init();
   ump3.changesetting('V', (uint8_t)10);
-  Serial.print(track_table_sz);
-  Serial.println(" tracks on the card");
   Serial.println(ump3.getsetting('V'));
 
   // Encoder Interrupt Service Routine
@@ -132,6 +129,7 @@ int counts_to_year(int counts) {
 
 int current_index = 0;
 PlayStateT gPlayState = STATE_INIT; 
+char current_track_name[FILE_NAME_MAX_SZ];
 
 void GoToState(PlayStateT ps) {
   if (gPlayState == ps)
@@ -139,7 +137,7 @@ void GoToState(PlayStateT ps) {
   switch(ps) {
     case STATE_RADIO_STATIC:
       gotoChannel(RADIO_STATION_STATIC);
-      if ((gPlayState == STATE_MP3_PLAYING) || (gPlayState == STATE_MP3_DONE)) {
+      if ((gPlayState == STATE_MP3_PLAYING) || (gPlayState == STATE_MP3_DONE) || (gPlayState == STATE_INIT)) {
         // Switch to FM
         setVolume(0, 0xaa); //FM
         setVolume(65, 0xa9); // MP3
@@ -148,7 +146,7 @@ void GoToState(PlayStateT ps) {
     break;
     case STATE_RADIO_PLAYING:
       gotoChannel(RADIO_STATION_LIVE);
-      if ((gPlayState == STATE_MP3_PLAYING) || (gPlayState == STATE_MP3_DONE)) {
+      if ((gPlayState == STATE_MP3_PLAYING) || (gPlayState == STATE_MP3_DONE) || (gPlayState == STATE_INIT)) {
         // Switch to FM
         setVolume(0, 0xaa); //FM
         setVolume(65, 0xa9); // MP3
@@ -156,16 +154,14 @@ void GoToState(PlayStateT ps) {
       }        
     break;
     case STATE_MP3_PLAYING:
-      play_track_idx(current_index);
-      if ((gPlayState == STATE_RADIO_STATIC) || (gPlayState == STATE_RADIO_PLAYING)) {
+      play_track(current_track_name);
+      if ((gPlayState == STATE_RADIO_STATIC) || (gPlayState == STATE_RADIO_PLAYING) || (gPlayState == STATE_INIT)) {
         // Switch to MP3
         setVolume(65, 0xaa);
         setVolume(0, 0xa9);
       }
       Serial.print("Playing track: ");
-      char fname[16];
-      track_table[current_index].get_filename(fname);
-      Serial.println(fname);
+      Serial.println(current_track_name);
     break;
   }
   gPlayState = ps;
@@ -189,9 +185,8 @@ void loop() {
     if (year == THIS_YEAR) {
       GoToState(STATE_RADIO_PLAYING);
     } else {
-      DateCode dc(year);
-      current_index = find_track_idx(dc);
-      if (current_index >= 0) {
+      bool found = tm.GetRandomTrack(current_track_name, year);
+      if (found) {
         GoToState(STATE_MP3_PLAYING);
       } else {
         GoToState(STATE_RADIO_STATIC);
@@ -482,6 +477,7 @@ int fm_readChannel(void) {
 }
 
 void gotoChannel(int newChannel){
+  int savedChannel = newChannel;
   //Freq(MHz) = 0.200(in USA) * Channel + 87.5MHz
   //97.3 = 0.2 * Chan + 87.5
   //9.8 / 0.2 = 49
@@ -502,12 +498,13 @@ void gotoChannel(int newChannel){
   //delay(60); //Wait 60ms - you can use or skip this delay
 
   //Poll to see if STC is set
-  Serial.println("Tuning");
+  Serial.print("Tuning to ");
+  Serial.println(savedChannel);
   while(1) {
     fm_readRegisters();
     if( (fm_registers[STATUSRSSI] & (1<<STC)) != 0) break; //Tuning complete!
   }
-  Serial.println("Tuning Complete");
+  //Serial.println("Tuning Complete");
   
   fm_readRegisters();
   fm_registers[CHANNEL] &= ~(1<<TUNE); //Clear the tune after a tune has completed
@@ -517,7 +514,7 @@ void gotoChannel(int newChannel){
   while(1) {
     fm_readRegisters();
     if( (fm_registers[STATUSRSSI] & (1<<STC)) == 0) break; //Tuning complete!
-    Serial.println("Waiting...");
+    //Serial.println("Waiting...");
   }
 }
 

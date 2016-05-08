@@ -1,42 +1,28 @@
 #ifndef _TRACKS_H_
 #define _TRACKS_H_
 
-#define TRACK_TABLE_MAX_SZ 128
+#define TRACK_INDEX_MAX_SZ 128
 #define FILE_NAME_MAX_SZ 16
 
-#if defined (__AVR_ATmega2560__)
 #define ump3_serial Serial1 
-#endif
 
 extern RogueMP3 ump3;
 
-class DateCode
+class TrackManager
 {
   public:
-    
-    union
-    {
-     long whole;
-     struct
-     {
-      int low_word;
-      int high_word;
-     };
-    } value;
-    
-    DateCode();
-    DateCode(long);
-    DateCode(int, int);
-    int set_str(char *);
-    void set(int, int);
-    int get_filename(char *);
-    bool operator>(DateCode);
-    bool operator<(DateCode);
-    long operator-(DateCode);
-    int epoch(void);
-    int year(void);
-};
+    // Constructor
+    TrackManager();
+    // Populate the index with this
+    bool AddTrack(char *fname);
+    // Retrieve filenames to play with this
+    bool GetRandomTrack(char *file_name, int year); 
 
+  private:
+    int years[TRACK_INDEX_MAX_SZ];
+    int num_tracks[TRACK_INDEX_MAX_SZ];
+    int track_index_sz;
+};
 
 #endif
 

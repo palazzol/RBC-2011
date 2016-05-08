@@ -7,73 +7,45 @@
 #define DEBUG_UMP3(x) ;
 #endif
 
-DateCode::DateCode(){};
-
-DateCode::DateCode(long v)
+TrackManager::TrackManager()
 {
-  this->value.whole = v;
+  track_index_sz = 0;
 }
 
-DateCode::DateCode(int y, int e)
-{
-  this->set(y, e);
-}
-    
-int DateCode::set_str(char * str)
+bool TrackManager::AddTrack(char *str)
 {
   int year;
-  int epoch;
+  int suffix; // actually, we dont use this
   
-  sscanf(str, "%de%d.mp3", &year, &epoch);
-
-  this->set(year, epoch);
-}
- 
-void DateCode::set(int year, int epoch)
-{  
-  if(year < 0)
-    epoch = -epoch;
-
-  this->value.high_word = epoch;
-  this->value.low_word = year;      
-}
-
-int DateCode::get_filename(char * str)
-{
-  int year, epoch;
+  sscanf(str, "%de%d.mp3", &year, &suffix);
   
-  year = this->value.low_word;
-  epoch = this->value.high_word;
-  epoch = abs(epoch);     
-  
-  return sprintf(str, "%de%02d.mp3", year, epoch); 
+  for (int i=0; i<track_index_sz; i++) {
+    if (years[i] == year) {
+      num_tracks[i] += 1;
+      return true;
+    }
+  }
+  if (track_index_sz == TRACK_INDEX_MAX_SZ-1)
+    return false;
+  years[track_index_sz] = year;
+  num_tracks[track_index_sz] = 1;
+  track_index_sz++;
+  return true;
 }
 
-bool DateCode::operator>(DateCode other)
+bool TrackManager::GetRandomTrack(char *file_name, int year)
 {
-  return this->value.whole > other.value.whole;
+  for (int i=0; i<track_index_sz; i++) {
+    if (years[i] == year) {
+      // found the year
+      int suffix = random(num_tracks[i]);
+      sprintf(file_name, "%de%02d.mp3", year, suffix);
+      return true;
+    }
+  }
+  return false;  
 }
-
-bool DateCode::operator<(DateCode other)
-{
-  return this->value.whole < other.value.whole;
-}
-
-long DateCode::operator-(DateCode other)
-{
-  return this->value.whole - other.value.whole;
-}
-
-int DateCode::epoch()
-{
-  return abs(this->value.high_word);
-}
-
-int DateCode::year()
-{
-  return this->value.low_word;
-}
-
+    
 RogueMP3 ump3(ump3_serial);
 
 #define LINE_BUF_SZ 64
@@ -97,7 +69,8 @@ int tracks_init(void)
   DEBUG_UMP3(String("ump3.sync() ") + String(idx));
   ump3.stop();
 
-  track_table_sz = 0;
+  int num_tracks = 0;
+
   idx = 0;
   ump3_serial.print("FC L /\r");
   
@@ -120,7 +93,8 @@ int tracks_init(void)
 
     if( 1 == sscanf(buf, "%*d %s", &file_name))
     {
-      track_table[track_table_sz++].set_str(file_name);
+      tm.AddTrack(file_name);
+      num_tracks++;
     }
 
     // wait here until next character is available
@@ -128,30 +102,14 @@ int tracks_init(void)
   }
   ump3_serial.read(); // read the '>'
 
+  Serial.print(num_tracks);
+  Serial.println(" tracks on the card");
+  
   return 0;
 }
 
-
-int find_track_idx(DateCode target)
+void play_track(char *file_name)
 {
-  int idx;
-  
-  // this is pretty dumb, i know.
-  // but can we be sure that the table is sorted?
-  for(idx=0; idx<track_table_sz; idx++)
-  {
-    if ((track_table[idx] - target) == 0)
-      return idx;
-  }
-  return -1;
-}
-
-void play_track_idx(int idx)
-{
-
-   char file_name[FILE_NAME_MAX_SZ];  
-   track_table[idx].get_filename(file_name); 
-
    ump3.sync();
    
    ump3_serial.print("PC F /");
