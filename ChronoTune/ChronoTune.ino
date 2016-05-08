@@ -8,18 +8,25 @@
 
 #include "tracks.h"
 
-DateCode track_table[TRACK_TABLE_MAX_SZ];
-int track_table_sz;
+/////// Values which need to change if you re-mount/change the limit switch or dial ///////
 
 // Where the dial stops
 #define COUNTS_MIN   300 
 #define COUNTS_MAX  2900
 
-// Used for calibration
+// Used for calibration - use debug serial input to convert from counts to dial position
 #define COUNTS_1850  416
 #define COUNTS_2050 2786
 
-// ATmega2560 pin connections
+// Change for the new year
+#define THIS_YEAR 2016
+
+// Radio station used for "static" sound (FM Mhz * 10)
+#define RADIO_STATION_STATIC  911
+// Radio station used for current year (FM Mhz * 10)
+#define RADIO_STATION_LIVE    947
+
+/////// ATmega2560 pin connections ///////
 
 // Wire peripherals
 #define SDIO_PIN    20
@@ -41,7 +48,7 @@ int track_table_sz;
 #define MOT_PIN 9
 #define MOT_DIR_PIN 8  // direction of stepper
 
-// i2c addresses
+/////// I2C addresses ///////
 
 #define FM_ADDY 0x10
 #define POT_1_ADDY 0x28
@@ -53,13 +60,22 @@ int track_table_sz;
 // encoderPos - written by ISR, read by main loop
 volatile int encoderPos = 0;
 
-int counts_1850 = COUNTS_1850;
-int counts_2050 = COUNTS_2050;
+// Enum for Chronotune State
+typedef enum {
+  STATE_INIT = 0,
+  STATE_RADIO_STATIC,
+  STATE_MP3_PLAYING,
+  STATE_MP3_DONE,
+  STATE_RADIO_PLAYING,
+} PlayStateT;
+
+// Global vars needed to manage tracks
+DateCode track_table[TRACK_TABLE_MAX_SZ];
+int track_table_sz;
 
 void setup() {
   
-  Serial.begin(57600);  // Debug
-  
+  Serial.begin(57600);  // Debug  
   Serial1.begin(4800);  // ump3 board
   
   // Rotary Encoder
@@ -68,7 +84,7 @@ void setup() {
 
   // Display
   display_init();
-  displayYear(12345);
+  displayYear(88888);
   
   // Limit switch
   pinMode(MOT_LIM_PIN, INPUT);
@@ -85,13 +101,10 @@ void setup() {
   if (encoderPos > COUNTS_MAX) 
     encoderPos = COUNTS_MAX;
   SendDialToCountsFromLimitSwitch(encoderPos);
-  
-  // Encoder Interrupt Service Routine
-  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoderISR, FALLING); 
-  
+    
   //FM
   fm_init();
-  gotoChannel(911);
+  gotoChannel(RADIO_STATION_STATIC);
   setVolume(0, 0xaa); //FM
 
   // MP3
@@ -101,27 +114,66 @@ void setup() {
   Serial.print(track_table_sz);
   Serial.println(" tracks on the card");
   Serial.println(ump3.getsetting('V'));
+
+  // Encoder Interrupt Service Routine
+  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoderISR, FALLING); 
 }
 
+// Utility Conversion Functions
 int year_to_counts(int year) {
-  return map(year, 1850, 2050, counts_1850, counts_2050);
+  return map(year, 1850, 2050, COUNTS_1850, COUNTS_2050);
 }
 
 int counts_to_year(int counts) {
-  return map(counts, counts_1850, counts_2050, 1850, 2050);
+  return map(counts, COUNTS_1850, COUNTS_2050, 1850, 2050);
 }
 
-void stepMotor() {
-  digitalWrite(MOT_PIN,LOW);
-  digitalWrite(MOT_PIN,HIGH);  
-  delayMicroseconds(500);
+// State Machine
+
+int current_index = 0;
+PlayStateT gPlayState = STATE_INIT; 
+
+void GoToState(PlayStateT ps) {
+  if (gPlayState == ps)
+    return;
+  switch(ps) {
+    case STATE_RADIO_STATIC:
+      gotoChannel(RADIO_STATION_STATIC);
+      if ((gPlayState == STATE_MP3_PLAYING) || (gPlayState == STATE_MP3_DONE)) {
+        // Switch to FM
+        setVolume(0, 0xaa); //FM
+        setVolume(65, 0xa9); // MP3
+        ump3.stop();
+      }
+    break;
+    case STATE_RADIO_PLAYING:
+      gotoChannel(RADIO_STATION_LIVE);
+      if ((gPlayState == STATE_MP3_PLAYING) || (gPlayState == STATE_MP3_DONE)) {
+        // Switch to FM
+        setVolume(0, 0xaa); //FM
+        setVolume(65, 0xa9); // MP3
+        ump3.stop();   
+      }        
+    break;
+    case STATE_MP3_PLAYING:
+      play_track_idx(current_index);
+      if ((gPlayState == STATE_RADIO_STATIC) || (gPlayState == STATE_RADIO_PLAYING)) {
+        // Switch to MP3
+        setVolume(65, 0xaa);
+        setVolume(0, 0xa9);
+      }
+      Serial.print("Playing track: ");
+      char fname[16];
+      track_table[current_index].get_filename(fname);
+      Serial.println(fname);
+    break;
+  }
+  gPlayState = ps;
 }
 
 char c;
 int last_year = 0;
-bool playing = false;
 int encPos = 0;
-char fname[16];
 
 void loop() {
   encPos = readEncoder();
@@ -133,22 +185,18 @@ void loop() {
     last_year = year;
 
     displayYear(year*10);
-    
-    if (playing) {
-      stopPlay();
-      playing = false;
+
+    if (year == THIS_YEAR) {
+      GoToState(STATE_RADIO_PLAYING);
+    } else {
+      DateCode dc(year);
+      current_index = find_track_idx(dc);
+      if (current_index >= 0) {
+        GoToState(STATE_MP3_PLAYING);
+      } else {
+        GoToState(STATE_RADIO_STATIC);
+      }
     }
-    
-    DateCode dc(year);
-    int idx = find_track_idx(dc);
-    if (idx >= 0) {
-      Serial.print("Playing track: ");
-      track_table[idx].get_filename(fname);
-      Serial.println(fname);
-      playTrack(idx);
-      playing = true;
-    }
-    
   }
   
   if (Serial.available()) {
@@ -161,6 +209,14 @@ void loop() {
       break;
     }
   }  
+}
+
+// Stepper Motor Control Routines
+
+void stepMotor() {
+  digitalWrite(MOT_PIN,LOW);
+  digitalWrite(MOT_PIN,HIGH);  
+  delayMicroseconds(500);
 }
 
 // Sends Dial to Limit Switch, Counting Steps
@@ -199,6 +255,8 @@ void SendDialToCountsFromLimitSwitch(int val) {
   }
 }
 
+// Encoder routines
+
 int b_pin = LOW; // To prevent re-allocation in the ISR 
 void encoderISR() {
   // we assume a is low because this is a "falling" routine
@@ -227,18 +285,6 @@ int readEncoder() {
   e = encoderPos;
   interrupts();
   return e;
-}
-
-void playTrack(int idx) {
-  play_track_idx(idx);
-  setVolume(65, 0xaa);
-  setVolume(0, 0xa9);
-}
-
-void stopPlay() {
-  setVolume(0, 0xaa);
-  setVolume(65, 0xa9);
-  ump3.stop();
 }
 
 //===================================================
