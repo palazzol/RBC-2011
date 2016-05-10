@@ -75,7 +75,7 @@ TrackManager tm;
 void setup() {
   
   Serial.begin(57600);  // Debug  
-  Serial1.begin(4800);  // ump3 board
+  Serial1.begin(9600);  // ump3 board
   
   // Rotary Encoder
   pinMode(ENCODER_A_PIN, INPUT);
@@ -83,7 +83,7 @@ void setup() {
 
   // Display
   display_init();
-  displayYear(88888);
+  displayYear(8888);
   
   // Limit switch
   pinMode(MOT_LIM_PIN, INPUT);
@@ -132,7 +132,7 @@ PlayStateT gPlayState = STATE_INIT;
 char current_track_name[FILE_NAME_MAX_SZ];
 
 void GoToState(PlayStateT ps) {
-  if (gPlayState == ps)
+  if ((gPlayState == ps) && (ps != STATE_MP3_PLAYING))
     return;
   switch(ps) {
     case STATE_RADIO_STATIC:
@@ -180,7 +180,7 @@ void loop() {
     Serial.println(year);
     last_year = year;
 
-    displayYear(year*10);
+    displayYear(year);
 
     if (year == THIS_YEAR) {
       GoToState(STATE_RADIO_PLAYING);
@@ -504,7 +504,6 @@ void gotoChannel(int newChannel){
     fm_readRegisters();
     if( (fm_registers[STATUSRSSI] & (1<<STC)) != 0) break; //Tuning complete!
   }
-  //Serial.println("Tuning Complete");
   
   fm_readRegisters();
   fm_registers[CHANNEL] &= ~(1<<TUNE); //Clear the tune after a tune has completed
@@ -524,28 +523,33 @@ void gotoChannel(int newChannel){
 void displayYear(long yr) {
   int digit1 = 0;
   int digit2 = 0;
-  byte out = 0;
+  int digit3 = 0;
+  int digit4 = 0;
+  byte out1 = 0;
+  byte out2 = 0;
+
+  digit4 = yr % 10;
+  yr /= 10;
+  digit3 = yr % 10;
+  yr /= 10;
+  digit2 = yr % 10;
+  yr /= 10;
+  digit1 = yr % 10;
   
-  digit1 = (yr/1000) % 10;
-  digit2 = (yr/100) % 10;
+  out1 = (digit2 << 4) | digit1;
+  out2 = (digit3 << 4) | digit4;
   
-  out = digit1 << 4;
-  out = out | digit2;
   Wire.beginTransmission(IO_1_ADDY);
   Wire.write(0x13);
-  Wire.write(out);
+  Wire.write(out1);
   Wire.endTransmission();
-
-  digit1 = (yr/10) % 10;
-  digit2 = yr % 10;
   
-  out = digit1 << 4;
-  out = out | digit2;
   Wire.beginTransmission(IO_2_ADDY);
   Wire.write(0x13);
-  Wire.write(out);
+  Wire.write(out2);
   Wire.endTransmission();
-  
+
+#if 0
   digit1 = yr/10000;
   
   out = digit1 << 4;
@@ -553,6 +557,7 @@ void displayYear(long yr) {
   Wire.write(0x12);
   Wire.write(out);
   Wire.endTransmission();
+#endif
   
 }
 
