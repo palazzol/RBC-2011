@@ -163,12 +163,61 @@ void GoToState(PlayStateT ps) {
       Serial.print("Playing track: ");
       Serial.println(current_track_name);
     break;
+    case STATE_MP3_DONE:
+      // Switch to FM
+      setVolume(0, 0xaa); //FM
+      setVolume(65, 0xa9); // MP3
+      ump3.stop();
+    break;
   }
   gPlayState = ps;
 }
 
-char c;
+long seconds = 0;
+long remainder = 0;
+long last_millis = millis();
 int last_year = 0;
+int seek_year = 0;
+
+void IdlePoll()
+{
+  long current = millis();
+  long diff = current - last_millis;
+  last_millis = current;
+  remainder += diff;
+  if (remainder > 1000) {
+    seconds += remainder/1000;
+    remainder = remainder % 1000;
+  }
+  if ((gPlayState != STATE_MP3_PLAYING) && (gPlayState != STATE_MP3_DONE)) {
+    seconds = 0;
+    remainder = 0;
+  } else if (gPlayState == STATE_MP3_PLAYING) {
+    if (seconds > 4) {
+      char s = get_playback_status();
+      if (s == 'P') {
+        seconds = 0;
+        remainder = 0;
+      } else if (s == 'S') {
+        seconds = 0;
+        remainder = 0;
+        GoToState(STATE_MP3_DONE);
+      }
+    }
+  } else if (gPlayState == STATE_MP3_DONE) {
+    if (seconds > 5) {
+      seconds = 0;
+      remainder = 0;
+      Serial.print("Bored! Try ");
+      seek_year = tm.GetRandomYear();
+      while (seek_year == last_year)
+        seek_year = tm.GetRandomYear();
+      Serial.println(seek_year);
+    }
+  }
+}
+
+char c;
 int encPos = 0;
 
 void loop() {
@@ -194,6 +243,8 @@ void loop() {
     }
   }
   
+  IdlePoll();
+
   if (Serial.available()) {
     c = Serial.read();
     switch(c) {
@@ -203,7 +254,8 @@ void loop() {
       }
       break;
     }
-  }  
+  } 
+   
 }
 
 // Stepper Motor Control Routines

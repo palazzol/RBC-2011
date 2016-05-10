@@ -45,7 +45,13 @@ bool TrackManager::GetRandomTrack(char *file_name, int year)
   }
   return false;  
 }
-    
+
+int TrackManager::GetRandomYear()
+{
+  int i = random(track_index_sz);
+  return years[i]; 
+}
+
 RogueMP3 ump3(ump3_serial);
 
 #define LINE_BUF_SZ 64
@@ -118,6 +124,11 @@ void play_track(char *file_name)
    
    ump3.stop();
 
+}
+
+char get_playback_status()
+{
+  return ump3.getplaybackstatus();
 }
 
   

@@ -16,8 +16,10 @@ class TrackManager
     // Populate the index with this
     bool AddTrack(char *fname);
     // Retrieve filenames to play with this
-    bool GetRandomTrack(char *file_name, int year); 
-
+    bool GetRandomTrack(char *file_name, int year);
+    // Get a random year to seek to 
+    int GetRandomYear();
+    
   private:
     int years[TRACK_INDEX_MAX_SZ];
     int num_tracks[TRACK_INDEX_MAX_SZ];
