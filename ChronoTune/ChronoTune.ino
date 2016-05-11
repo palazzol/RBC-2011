@@ -26,6 +26,11 @@
 // Radio station used for current year (FM Mhz * 10)
 #define RADIO_STATION_LIVE    947
 
+// Time (seconds) to linger after a track is done playing
+#define LINGER_MP3_DONE_TIME 5
+// Time (seconds) to linger on a dead station
+#define LINGER_RADIO_STATIC_TIME 20
+
 /////// ATmega2560 pin connections ///////
 
 // Wire peripherals
@@ -155,7 +160,7 @@ void GoToState(PlayStateT ps) {
     break;
     case STATE_MP3_PLAYING:
       play_track(current_track_name);
-      if ((gPlayState == STATE_RADIO_STATIC) || (gPlayState == STATE_RADIO_PLAYING) || (gPlayState == STATE_INIT)) {
+      if ((gPlayState == STATE_RADIO_STATIC) || (gPlayState == STATE_RADIO_PLAYING) || (gPlayState == STATE_MP3_DONE) || (gPlayState == STATE_INIT)) {
         // Switch to MP3
         setVolume(65, 0xaa);
         setVolume(0, 0xa9);
@@ -173,47 +178,99 @@ void GoToState(PlayStateT ps) {
   gPlayState = ps;
 }
 
-long seconds = 0;
-long remainder = 0;
-long last_millis = millis();
 int last_year = 0;
 int seek_year = 0;
 
-void IdlePoll()
+long seconds = 0;
+long millisecs = 0;
+
+void UpdateIdleTimer()
 {
+  static long last_millis = millis();
+  
   long current = millis();
   long diff = current - last_millis;
   last_millis = current;
-  remainder += diff;
-  if (remainder > 1000) {
-    seconds += remainder/1000;
-    remainder = remainder % 1000;
+  
+  millisecs += diff;
+  if (millisecs > 1000) {
+    seconds += millisecs/1000;
+    millisecs = millisecs % 1000;
   }
-  if ((gPlayState != STATE_MP3_PLAYING) && (gPlayState != STATE_MP3_DONE)) {
-    seconds = 0;
-    remainder = 0;
+}
+
+int idle_seconds = 0;
+
+void IdlePoll()
+{
+  static long last_seconds = 0;
+  if (seconds != last_seconds)
+  {
+    idle_seconds++;
+    last_seconds = seconds;
+  }
+  if ((gPlayState != STATE_MP3_PLAYING) && (gPlayState != STATE_MP3_DONE) && (gPlayState != STATE_RADIO_STATIC)) {
+    idle_seconds = 0;
   } else if (gPlayState == STATE_MP3_PLAYING) {
-    if (seconds > 4) {
+    if (idle_seconds > 4) {
       char s = get_playback_status();
       if (s == 'P') {
-        seconds = 0;
-        remainder = 0;
+        idle_seconds = 0;
       } else if (s == 'S') {
-        seconds = 0;
-        remainder = 0;
+        idle_seconds = 0;
         GoToState(STATE_MP3_DONE);
       }
     }
   } else if (gPlayState == STATE_MP3_DONE) {
-    if (seconds > 5) {
-      seconds = 0;
-      remainder = 0;
-      Serial.print("Bored! Try ");
+    if (idle_seconds > LINGER_MP3_DONE_TIME) {
+      idle_seconds = 0;
+      Serial.print("Bored! Trying ");
       seek_year = tm.GetRandomYear();
       while (seek_year == last_year)
         seek_year = tm.GetRandomYear();
       Serial.println(seek_year);
     }
+  } else if (gPlayState == STATE_RADIO_STATIC) {
+    if (idle_seconds > LINGER_RADIO_STATIC_TIME) {
+      idle_seconds = 0;
+      Serial.print("Bored! Trying ");
+      seek_year = tm.GetRandomYear();
+      while (seek_year == last_year)
+        seek_year = tm.GetRandomYear();
+      Serial.println(seek_year);
+    }
+  }
+}
+
+void DoSeeking()
+{
+  int syear = 0;
+  int year = last_year;
+
+  noInterrupts();
+  syear = seek_year;
+  interrupts();
+  
+  while((syear != 0) && (syear != year))
+  {
+    noInterrupts();
+    if (syear > year) {
+      encoderPos++;
+      digitalWrite(MOT_DIR_PIN, HIGH);
+      digitalWrite(MOT_PIN,LOW);
+      digitalWrite(MOT_PIN,HIGH);
+    } else if (syear < year) {
+      encoderPos--;
+      digitalWrite(MOT_DIR_PIN, LOW);
+      digitalWrite(MOT_PIN,LOW);
+      digitalWrite(MOT_PIN,HIGH);
+    }
+    interrupts();
+    delayMicroseconds(1500);
+    noInterrupts();
+    syear = seek_year;
+    interrupts();
+    year = counts_to_year(readEncoder());
   }
 }
 
@@ -242,9 +299,13 @@ void loop() {
       }
     }
   }
+
+  UpdateIdleTimer();
   
   IdlePoll();
 
+  DoSeeking();
+  
   if (Serial.available()) {
     c = Serial.read();
     switch(c) {
@@ -324,6 +385,7 @@ void encoderISR() {
       digitalWrite(MOT_PIN,HIGH);
     }
   }
+  seek_year = 0;
 }
 
 int e;
