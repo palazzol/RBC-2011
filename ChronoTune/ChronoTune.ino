@@ -9,7 +9,7 @@
 #define ump3_serial Serial1 
 RogueMP3 ump3(ump3_serial);
 
-#include "tracks.h"
+#include "TrackManager.h"
 
 /////// Values which need to change if you re-mount/change the limit switch or dial ///////
 
@@ -702,9 +702,6 @@ int tracks_init(void)
   long baud;
   char buf[LINE_BUF_SZ];
   char file_name[FILE_NAME_MAX_SZ];
-
-  ump3.sync();
-  ump3.stop();
 
   int num_tracks = 0;
 
