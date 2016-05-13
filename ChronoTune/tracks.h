@@ -4,10 +4,6 @@
 #define TRACK_INDEX_MAX_SZ 128
 #define FILE_NAME_MAX_SZ 16
 
-#define ump3_serial Serial1 
-
-extern RogueMP3 ump3;
-
 class TrackManager
 {
   public:

@@ -6,6 +6,9 @@
 #include <EEPROM.h>
 #include <RogueMP3.h>
 
+#define ump3_serial Serial1 
+RogueMP3 ump3(ump3_serial);
+
 #include "tracks.h"
 
 /////// Values which need to change if you re-mount/change the limit switch or dial ///////
@@ -80,7 +83,9 @@ TrackManager tm;
 void setup() {
   
   Serial.begin(57600);  // Debug  
-  Serial1.begin(9600);  // ump3 board
+  ump3_serial.begin(9600);  // ump3 board
+  ump3.sync();
+  ump3.stop();
   
   // Rotary Encoder
   pinMode(ENCODER_A_PIN, INPUT);
@@ -114,8 +119,7 @@ void setup() {
   // MP3
   setVolume(65, 0xa9);
   tracks_init();
-  ump3.changesetting('V', (uint8_t)10);
-  Serial.println(ump3.getsetting('V'));
+  ump3.setVolume(10);
 
   // Encoder Interrupt Service Routine
   attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoderISR, FALLING); 
@@ -159,7 +163,7 @@ void GoToState(PlayStateT ps) {
       }        
     break;
     case STATE_MP3_PLAYING:
-      play_track(current_track_name);
+      ump3.playFile(current_track_name);
       if ((gPlayState == STATE_RADIO_STATIC) || (gPlayState == STATE_RADIO_PLAYING) || (gPlayState == STATE_MP3_DONE) || (gPlayState == STATE_INIT)) {
         // Switch to MP3
         setVolume(65, 0xaa);
@@ -213,13 +217,9 @@ void IdlePoll()
     idle_seconds = 0;
   } else if (gPlayState == STATE_MP3_PLAYING) {
     if (idle_seconds > 4) {
-      char s = get_playback_status();
-      if (s == 'P') {
-        idle_seconds = 0;
-      } else if (s == 'S') {
-        idle_seconds = 0;
+      idle_seconds = 0;
+      if (!ump3.isPlaying())
         GoToState(STATE_MP3_DONE);
-      }
     }
   } else if (gPlayState == STATE_MP3_DONE) {
     if (idle_seconds > LINGER_MP3_DONE_TIME) {
@@ -686,5 +686,62 @@ void display_init() {
   Wire.write(0x00);
   Wire.write(0x00);
   Wire.endTransmission();
+}
+
+#define LINE_BUF_SZ 64
+
+//
+//  tracks_init
+//
+//  Initialize the interface to the mp3 board.
+//  Also populates the track table.
+//
+int tracks_init(void)
+{
+  int idx;
+  long baud;
+  char buf[LINE_BUF_SZ];
+  char file_name[FILE_NAME_MAX_SZ];
+
+  ump3.sync();
+  ump3.stop();
+
+  int num_tracks = 0;
+
+  idx = 0;
+  ump3_serial.print("FC L /\r");
+  
+  while(ump3_serial.peek() != '>')
+  {
+    idx = 0;
+
+    // read the whole line
+    do
+    {
+      while(!ump3_serial.available());
+      buf[idx++] = ump3_serial.read();
+    } while(buf[idx-1] != 0x0D);
+    
+    // replace the trailing CR with a null
+    buf[idx-1] = 0;
+    
+    //Serial.print("uMP3 rx: ");
+    //Serial.println(buf);
+
+    if( 1 == sscanf(buf, "%*d %s", &file_name))
+    {
+      tm.AddTrack(file_name);
+      num_tracks++;
+    }
+
+    // wait here until next character is available
+    while(!ump3_serial.available());
+  }
+  ump3_serial.read(); // read the '>'
+
+  Serial.print(num_tracks);
+  Serial.println(" tracks on the card");
+  
+  return 0;
 }
 
