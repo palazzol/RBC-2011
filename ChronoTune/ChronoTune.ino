@@ -13,13 +13,16 @@ RogueMP3 ump3(ump3_serial);
 
 /////// Values which need to change if you re-mount/change the limit switch or dial ///////
 
-// Where the dial stops
-#define COUNTS_MIN   300 
-#define COUNTS_MAX  2900
+// Where the dial stops normally
+#define YEARPOS_MIN   (1840*65536)
+#define YEARPOS_MAX   (2060*65536)
 
 // Used for calibration - use debug serial input to convert from counts to dial position
 #define COUNTS_1850  416
 #define COUNTS_2050 2786
+
+// Hard Limit during calibration
+#define COUNTS_MAX  2900
 
 // Change for the new year
 #define THIS_YEAR 2016
@@ -65,8 +68,11 @@ RogueMP3 ump3(ump3_serial);
 #define IO_1_ADDY 0x26
 #define IO_2_ADDY 0x27
 
-// encoderPos - written by ISR, read by main loop
-volatile int encoderPos = 0;
+// yearPos - written by ISR, read by main loop
+volatile long yearPos = 0;
+volatile long increment = 0;
+
+volatile bool using_i2c = false;
 
 // Enum for Chronotune State
 typedef enum {
@@ -106,11 +112,17 @@ void setup() {
   digitalWrite(MOT_DIR_PIN, LOW);
 
   // encoderPos is not "live" yet, reset it to the current dial position
-  encoderPos = calculateStepsFromLimit();
+  int encoderPos = calculateStepsFromLimit();
   if (encoderPos > COUNTS_MAX) 
     encoderPos = COUNTS_MAX;
   SendDialToCountsFromLimitSwitch(encoderPos);
-    
+
+  // Initialize encoder values
+  increment = (2050-1850)*65536/(COUNTS_2050-COUNTS_1850); 
+  yearPos = 1850*65536+increment*encoderPos-increment*COUNTS_1850;
+
+  displayYear(readYear());
+  
   //FM
   fm_init();
   gotoChannel(RADIO_STATION_STATIC);
@@ -123,15 +135,6 @@ void setup() {
 
   // Encoder Interrupt Service Routine
   attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoderISR, FALLING); 
-}
-
-// Utility Conversion Functions
-int year_to_counts(int year) {
-  return map(year, 1850, 2050, COUNTS_1850, COUNTS_2050);
-}
-
-int counts_to_year(int counts) {
-  return map(counts, COUNTS_1850, COUNTS_2050, 1850, 2050);
 }
 
 // State Machine
@@ -183,7 +186,7 @@ void GoToState(PlayStateT ps) {
 }
 
 int last_year = 0;
-int seek_year = 0;
+volatile int seek_year = 0;
 
 long seconds = 0;
 long millisecs = 0;
@@ -225,19 +228,21 @@ void IdlePoll()
     if (idle_seconds > LINGER_MP3_DONE_TIME) {
       idle_seconds = 0;
       Serial.print("Bored! Trying ");
-      seek_year = tm.GetRandomYear();
-      while (seek_year == last_year)
-        seek_year = tm.GetRandomYear();
-      Serial.println(seek_year);
+      int temp_seek_year = tm.GetRandomYear();
+      while (temp_seek_year == last_year)
+        temp_seek_year = tm.GetRandomYear();
+      Serial.println(temp_seek_year);
+      writeSeekYear(temp_seek_year);
     }
   } else if (gPlayState == STATE_RADIO_STATIC) {
     if (idle_seconds > LINGER_RADIO_STATIC_TIME) {
       idle_seconds = 0;
       Serial.print("Bored! Trying ");
-      seek_year = tm.GetRandomYear();
-      while (seek_year == last_year)
-        seek_year = tm.GetRandomYear();
-      Serial.println(seek_year);
+      int temp_seek_year = tm.GetRandomYear();
+      while (temp_seek_year == last_year)
+        temp_seek_year = tm.GetRandomYear();
+      Serial.println(temp_seek_year);
+      writeSeekYear(temp_seek_year);
     }
   }
 }
@@ -247,47 +252,39 @@ void DoSeeking()
   int syear = 0;
   int year = last_year;
 
-  noInterrupts();
-  syear = seek_year;
-  interrupts();
+  syear = readSeekYear();
   
   while((syear != 0) && (syear != year))
   {
     noInterrupts();
-    if (syear > year) {
-      encoderPos++;
-      digitalWrite(MOT_DIR_PIN, HIGH);
-      digitalWrite(MOT_PIN,LOW);
-      digitalWrite(MOT_PIN,HIGH);
-    } else if (syear < year) {
-      encoderPos--;
-      digitalWrite(MOT_DIR_PIN, LOW);
-      digitalWrite(MOT_PIN,LOW);
-      digitalWrite(MOT_PIN,HIGH);
-    }
+    if (syear > year)
+      moveDial(HIGH);
+    else if (syear < year)
+      moveDial(LOW);
     interrupts();
     delayMicroseconds(1500);
-    noInterrupts();
-    syear = seek_year;
-    interrupts();
-    year = counts_to_year(readEncoder());
+    syear = readSeekYear();
+    year = readYear();
   }
 }
 
 char c;
-int encPos = 0;
 
 void loop() {
-  encPos = readEncoder();
-
-  int year = counts_to_year(encPos);
+  
+  int year = readYear();
   if (year != last_year) {
     Serial.print("Year = ");
     Serial.println(year);
+    
     last_year = year;
 
-    displayYear(year);
-
+    if (year != readDisplayYear()) {
+      using_i2c = true;
+      displayYear(year);
+      using_i2c = false;
+    }
+    
     if (year == THIS_YEAR) {
       GoToState(STATE_RADIO_PLAYING);
     } else {
@@ -301,11 +298,11 @@ void loop() {
   }
 
   UpdateIdleTimer();
-  
+
   IdlePoll();
 
   DoSeeking();
-  
+
   if (Serial.available()) {
     c = Serial.read();
     switch(c) {
@@ -365,46 +362,85 @@ void SendDialToCountsFromLimitSwitch(int val) {
 
 // Encoder routines
 
+volatile int display_year = 0;
+
 int b_pin = LOW; // To prevent re-allocation in the ISR 
 void encoderISR() {
   // we assume a is low because this is a "falling" routine
   // and we should have timely interrupt processing
   b_pin = digitalRead(ENCODER_B_PIN);
-  if (b_pin == HIGH) { // clockwise tick
-    if (encoderPos < COUNTS_MAX) {
-      encoderPos++;
+  seek_year = 0;
+  moveDial(b_pin);
+}
+
+void moveDial(int dir)
+{
+  if (dir == HIGH) { // clockwise tick
+    if (yearPos < YEARPOS_MAX) {
+      yearPos+=increment;
       digitalWrite(MOT_DIR_PIN, HIGH);
       digitalWrite(MOT_PIN,LOW);
       digitalWrite(MOT_PIN,HIGH);
     } 
   } else { // counter-clockwise tick
-    if (encoderPos > COUNTS_MIN) {
-      encoderPos--;
+    if (yearPos > YEARPOS_MIN) {
+      yearPos-=increment;
       digitalWrite(MOT_DIR_PIN, LOW);
       digitalWrite(MOT_PIN,LOW);
       digitalWrite(MOT_PIN,HIGH);
     }
   }
-  seek_year = 0;
+  if (using_i2c) return;
+  if (display_year != yearPos>>16) {
+    display_year = yearPos>>16;
+    detachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN));
+    interrupts();
+    displayYear(display_year);
+    noInterrupts();
+    attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoderISR, FALLING);
+    interrupts(); 
+  }
 }
 
-int e;
-int readEncoder() {
+int y;
+int readYear() {
   noInterrupts();
-  e = encoderPos;
+  y = yearPos>>16;
   interrupts();
-  return e;
+  return y;
 }
 
+int s;
+int readSeekYear() {
+  noInterrupts();
+  s = seek_year;
+  interrupts();
+  return s;
+}
+
+int writeSeekYear(int s) {
+  noInterrupts();
+  seek_year = s;
+  interrupts();
+}
+
+int d;
+int readDisplayYear() {
+  noInterrupts();
+  d = display_year;
+  interrupts();
+  return d;
+}
 //===================================================
 //Audio pot stuff
 //===================================================
 void setVolume(byte vol, byte pot) {
+  using_i2c = true;
   Wire.beginTransmission(POT_1_ADDY);
   Wire.write(pot);
   Wire.write(vol);
-  
   Wire.endTransmission();
+  using_i2c = false;
 }
 
 //===================================================
@@ -591,6 +627,7 @@ int fm_readChannel(void) {
 }
 
 void gotoChannel(int newChannel){
+  using_i2c = true;
   int savedChannel = newChannel;
   //Freq(MHz) = 0.200(in USA) * Channel + 87.5MHz
   //97.3 = 0.2 * Chan + 87.5
@@ -629,6 +666,7 @@ void gotoChannel(int newChannel){
     if( (fm_registers[STATUSRSSI] & (1<<STC)) == 0) break; //Tuning complete!
     //Serial.println("Waiting...");
   }
+  using_i2c = false;
 }
 
 //===================================================
