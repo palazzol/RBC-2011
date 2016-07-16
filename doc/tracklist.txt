@@ -1,6 +1,6 @@
 1850	"Traffic Report"
 1863	Gettysburg Address
-1878	Thomas Edison cylider recording
+1878	Thomas Edison cylinder recording
 1899	"1899"
 1910	Silent Night recorded in German
 1917	Over There
@@ -9,7 +9,7 @@
 1928	Winston Churchill - Chap 1 1919-1929
 1932	Texaco Fire Theater?
 1933	Kraft Music Hall
-1934	Adolf Hitler
+1934	Adolf Hitler opens the Olympics
 1935	Flash Gordon
 1936	Abdication of the Monarchy
 1937	Hindenburg
@@ -40,3 +40,22 @@
 2006	Bill Clinton - Lewinski Denial
 2008	Barack Obama - Election Night Speech
 2050	The Jetsons - Main Title
+
+New Track ideas:
+
+1963 - Kennedy Assn
+H2G2 Radio Play
+Dimension X
+X-1
+Mercury Theater on the air
+Donovan's brain
+Orson Welles Donovan's Brain parody
+Fall of the Berlin Wall?
+Student Protests at Berkeley 1971
+Bay of pigs
+Station IDs
+Commercials
+Dr. Demento
+
+
+
